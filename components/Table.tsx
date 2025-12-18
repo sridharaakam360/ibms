@@ -7,7 +7,6 @@ export interface Column<T> {
   className?: string; 
   headerClassName?: string;
   sortable?: boolean;
-  sortFn?: (a: T, b: T) => number;
 }
 
 interface TableProps<T> {
@@ -17,7 +16,6 @@ interface TableProps<T> {
   keyExtractor: (row: T) => string | number;
   emptyMessage?: string;
   searchable?: boolean;
-  searchPlaceholder?: string;
 }
 
 const Table = <T,>({ 
@@ -26,57 +24,45 @@ const Table = <T,>({
   rowsPerPage = 10, 
   keyExtractor, 
   emptyMessage = "No data found",
-  searchable = false,
-  searchPlaceholder = "Search..."
+  searchable = false
 }: TableProps<T>) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortConfig, setSortConfig] = useState<{ key: number | null; direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
+  const [sortConfig, setSortConfig] = useState<{ key: number | null, direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
 
-  // 1. Filtering
+  // 1. Filtering Logic
   const filteredData = useMemo(() => {
     if (!searchTerm) return data;
     const lowerTerm = searchTerm.toLowerCase();
-    
-    return data.filter(row => {
-      // Simple search: check all string/number values in the row
-      return Object.values(row as any).some(val => 
+    return data.filter((row: any) => {
+      return Object.values(row).some(val => 
         String(val).toLowerCase().includes(lowerTerm)
       );
     });
   }, [data, searchTerm]);
 
-  // 2. Sorting
+  // 2. Sorting Logic
   const sortedData = useMemo(() => {
     if (sortConfig.key === null) return filteredData;
     
-    const colIndex = sortConfig.key;
-    const column = columns[colIndex];
+    const col = columns[sortConfig.key];
+    const key = col.accessorKey;
+    if (!key) return filteredData;
+
     const direction = sortConfig.direction === 'asc' ? 1 : -1;
-
-    return [...filteredData].sort((a, b) => {
-        if (column.sortFn) {
-            return column.sortFn(a, b) * direction;
-        }
-        
-        const aVal = column.accessorKey ? a[column.accessorKey] : '';
-        const bVal = column.accessorKey ? b[column.accessorKey] : '';
-
-        if (aVal === bVal) return 0;
-        // Handle undefined/null
-        if (aVal === undefined || aVal === null) return 1;
-        if (bVal === undefined || bVal === null) return -1;
-        
-        return aVal > bVal ? direction : -direction;
+    return [...filteredData].sort((a: any, b: any) => {
+      const aVal = a[key];
+      const bVal = b[key];
+      if (aVal < bVal) return -1 * direction;
+      if (aVal > bVal) return 1 * direction;
+      return 0;
     });
   }, [filteredData, sortConfig, columns]);
 
-  // 3. Pagination
   const totalPages = Math.max(1, Math.ceil(sortedData.length / rowsPerPage));
   
-  // Reset page when data/search changes
   useMemo(() => {
-    if (currentPage > totalPages) setCurrentPage(1);
+      if (currentPage > totalPages) setCurrentPage(1);
   }, [sortedData.length, totalPages, currentPage]);
 
   const startIndex = (currentPage - 1) * rowsPerPage;
@@ -89,8 +75,10 @@ const Table = <T,>({
   };
 
   const handleSort = (index: number) => {
-      if (!columns[index].sortable) return;
-      
+      const col = columns[index];
+      if (col.sortable === false) return;
+      if (!col.accessorKey && !col.sortable) return;
+
       let direction: 'asc' | 'desc' = 'asc';
       if (sortConfig.key === index && sortConfig.direction === 'asc') {
           direction = 'desc';
@@ -104,7 +92,7 @@ const Table = <T,>({
           <div className="mb-4 relative">
              <input 
                 type="text" 
-                placeholder={searchPlaceholder}
+                placeholder="Search..." 
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                 className="pl-9 pr-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full md:w-64 text-sm" 
@@ -121,15 +109,13 @@ const Table = <T,>({
                 <th 
                   key={idx} 
                   onClick={() => handleSort(idx)}
-                  className={`py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider ${col.headerClassName || ''} ${col.sortable ? 'cursor-pointer hover:bg-gray-50 select-none' : ''}`}
+                  className={`py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider ${col.headerClassName || ''} cursor-pointer hover:bg-gray-50 select-none`}
                 >
                   <div className="flex items-center gap-1">
                       {col.header}
-                      {col.sortable && (
-                          <span className="text-gray-300">
-                              {sortConfig.key === idx ? (sortConfig.direction === 'asc' ? '↑' : '↓') : '↕'}
-                          </span>
-                      )}
+                      <span className="text-[10px] text-gray-300">
+                          {sortConfig.key === idx ? (sortConfig.direction === 'asc' ? '↑' : '↓') : '↕'}
+                      </span>
                   </div>
                 </th>
               ))}
@@ -156,7 +142,6 @@ const Table = <T,>({
         </table>
       </div>
       
-      {/* Pagination */}
       {sortedData.length > rowsPerPage && (
         <div className="flex flex-col sm:flex-row items-center justify-between mt-4 pt-4 border-t border-gray-50 px-2 gap-4">
           <p className="text-xs text-gray-500">

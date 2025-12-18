@@ -30,7 +30,6 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-100">
-      {/* Sidebar */}
       <Sidebar 
         currentView={currentView} 
         onChangeView={setCurrentView} 
@@ -38,7 +37,6 @@ const App: React.FC = () => {
         setIsOpen={setSidebarOpen}
       />
 
-      {/* Main Content */}
       <div className="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
         <main className="mx-auto min-h-screen w-full p-4 md:p-6 lg:p-8">
             <Navbar 

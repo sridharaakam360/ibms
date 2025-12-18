@@ -7,7 +7,7 @@ export interface BankAccount {
   branch: string;
   accountHolderName: string;
   accountNumber: string;
-  passbookFile?: File | null; // File associated specifically with this account
+  passbookFile?: File | null;
 }
 
 export interface OtherDocument {
@@ -29,20 +29,18 @@ export interface Investment {
   startDate: string;
   endDate: string;
   interestRate: string;
-  bankAccountId?: string; // Linked Bank Account ID (Payout Bank - Investor's Bank)
-  senderBankId?: string;  // Linked Bank Account ID (Sender Bank - Admin's Bank)
-  payoutDate?: string;    // 10th, 20th, 30th
+  bankAccountId?: string;
+  senderBankId?: string;
+  payoutDate?: string;
   
-  // Marketing Details (Per Investment)
-  portfolioId?: string;       // Marketer
-  subMarketorId?: string;     // Sub-Marketer
-  marketorCommission?: string;    // %
-  subMarketorCommission?: string; // %
+  portfolioId?: string;
+  subMarketorId?: string;
+  marketorCommission?: string;
+  subMarketorCommission?: string;
 }
 
 export interface Investor {
   id: string;
-  // Personal Info
   firstName: string;
   lastName: string;
   gender: string;
@@ -56,17 +54,10 @@ export interface Investor {
   district: string;
   state: string;
   pincode: string;
-  
-  // Investment Details
   investments: Investment[];
-
-  // Banking
   bankAccounts: BankAccount[];
-  
-  // KYC Status/Data
   kycDocuments?: KYCDocuments;
   kycStatus: 'Pending' | 'Verified' | 'Incomplete';
-  
   notes?: string;
   aiSummary?: string;
 }
@@ -76,32 +67,28 @@ export interface SubMarketor {
   name: string;
   phone: string;
   email: string;
-  // Personal Details
   pan?: string;
   aadhar?: string;
   address?: string;
   city?: string;
   state?: string;
-  // Bank Details
   bankAccounts: BankAccount[];
 }
 
 export interface Portfolio {
   id: string;
-  name: string; // This represents the Marketer Name
+  name: string;
   email: string;
   phone: string;
   totalRaised: string;
   investorCount: number;
   logo?: File | null;
   subMarketors: SubMarketor[];
-  // Personal Details
   pan?: string;
   aadhar?: string;
   address?: string;
   city?: string;
   state?: string;
-  // Bank Details
   bankAccounts: BankAccount[];
 }
 
@@ -109,7 +96,7 @@ export interface AdminProfile {
   name: string;
   email: string;
   phone: string;
-  bankAccounts: BankAccount[]; // These are the "Sender Banks" available to all
+  bankAccounts: BankAccount[];
 }
 
 export interface NavItem {
