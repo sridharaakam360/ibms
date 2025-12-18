@@ -1,0 +1,140 @@
+// API Service Layer
+// Handles all API calls with authentication
+
+const API_BASE_URL = 'http://localhost:5000/api';
+
+// Helper function to get auth headers
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+  };
+};
+
+// Helper function to handle API errors
+const handleResponse = async (response: Response) => {
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+  }
+  return response.json();
+};
+
+// Investors API
+export const investorsAPI = {
+  getAll: async () => {
+    const response = await fetch(`${API_BASE_URL}/investors`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getById: async (id: string) => {
+    const response = await fetch(`${API_BASE_URL}/investors/${id}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  create: async (formData: FormData) => {
+    const token = localStorage.getItem('auth_token');
+    const response = await fetch(`${API_BASE_URL}/investors`, {
+      method: 'POST',
+      headers: {
+        ...(token && { 'Authorization': `Bearer ${token}` }),
+      },
+      body: formData, // Don't set Content-Type for FormData
+    });
+    return handleResponse(response);
+  },
+
+  update: async (id: string, data: any) => {
+    const response = await fetch(`${API_BASE_URL}/investors/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  delete: async (id: string) => {
+    const response = await fetch(`${API_BASE_URL}/investors/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+};
+
+// Portfolios API
+export const portfoliosAPI = {
+  getAll: async () => {
+    const response = await fetch(`${API_BASE_URL}/portfolios`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  create: async (data: { name: string; description?: string; defaultCommissionRate?: number }) => {
+    const response = await fetch(`${API_BASE_URL}/portfolios`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  addSubMarketor: async (portfolioId: string, data: { name: string; email?: string; mobile?: string; commissionRate?: number }) => {
+    const response = await fetch(`${API_BASE_URL}/portfolios/${portfolioId}/sub-marketors`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+};
+
+// Admin Banks API
+export const adminBanksAPI = {
+  getAll: async () => {
+    const response = await fetch(`${API_BASE_URL}/admin-banks`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  create: async (data: { ifsc: string; bankName: string; branch: string; accountHolderName: string; accountNumber: string }) => {
+    const response = await fetch(`${API_BASE_URL}/admin-banks`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+};
+
+// Dashboard API
+export const dashboardAPI = {
+  getStats: async () => {
+    const response = await fetch(`${API_BASE_URL}/dashboard/stats`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getActivities: async () => {
+    const response = await fetch(`${API_BASE_URL}/dashboard/activities`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+};
+
+// Export all APIs
+export default {
+  investors: investorsAPI,
+  portfolios: portfoliosAPI,
+  adminBanks: adminBanksAPI,
+  dashboard: dashboardAPI,
+};

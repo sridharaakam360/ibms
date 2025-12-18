@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AdminProfile, BankAccount } from '../types';
+import { useAuth } from '../src/contexts/AuthContext';
 
 interface NavbarProps {
   title: string;
@@ -9,7 +10,9 @@ interface NavbarProps {
 }
 
 const Navbar: React.FC<NavbarProps> = ({ title, onMenuClick, adminProfile, setAdminProfile }) => {
+  const { user, logout } = useAuth();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [formData, setFormData] = useState<AdminProfile>({
       name: '', email: '', phone: '', bankAccounts: []
   });
@@ -109,14 +112,60 @@ const Navbar: React.FC<NavbarProps> = ({ title, onMenuClick, adminProfile, setAd
             <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 512 512" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M440.5 88.5l-52 52L415 167c9.4 9.4 9.4 24.6 0 33.9l-17.4 17.4c11.8 26.1 18.4 55.1 18.4 85.6 0 114.9-93.1 208-208 208S0 418.9 0 304 93.1 96 208 96c30.5 0 59.5 6.6 85.6 18.4L311 97c9.4-9.4 24.6-9.4 33.9 0l26.5 26.5 52-52 17.1 17z"></path></svg>
         </span>
         
-        {/* Profile */}
-        <div 
-            className="h-10 w-10 overflow-hidden rounded-full border border-gray-200 cursor-pointer hover:ring-2 hover:ring-indigo-500 transition-all"
-            onClick={() => setIsProfileOpen(true)}
-        >
-            <div className="h-full w-full bg-indigo-600 flex items-center justify-center text-white font-bold">
-                {adminProfile?.name ? adminProfile.name.charAt(0).toUpperCase() : 'A'}
+        {/* Profile Dropdown */}
+        <div className="relative">
+            <div
+                className="h-10 w-10 overflow-hidden rounded-full border border-gray-200 cursor-pointer hover:ring-2 hover:ring-indigo-500 transition-all"
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            >
+                <div className="h-full w-full bg-indigo-600 flex items-center justify-center text-white font-bold">
+                    {user?.username ? user.username.charAt(0).toUpperCase() : 'A'}
+                </div>
             </div>
+
+            {/* Dropdown Menu */}
+            {isDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50">
+                    {/* User Info */}
+                    <div className="px-4 py-3 border-b border-gray-100">
+                        <p className="text-sm font-semibold text-gray-800">{user?.username}</p>
+                        <p className="text-xs text-gray-500">{user?.email}</p>
+                        <span className={`inline-block mt-1 px-2 py-0.5 text-[10px] font-bold rounded-full ${
+                            user?.role === 'super_admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                        }`}>
+                            {user?.role === 'super_admin' ? 'Super Admin' : 'Admin'}
+                        </span>
+                    </div>
+
+                    {/* Menu Items */}
+                    <button
+                        onClick={() => {
+                            setIsDropdownOpen(false);
+                            setIsProfileOpen(true);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Settings
+                    </button>
+
+                    <button
+                        onClick={() => {
+                            setIsDropdownOpen(false);
+                            logout();
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-gray-100 mt-1"
+                    >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                        Logout
+                    </button>
+                </div>
+            )}
         </div>
       </div>
     </nav>

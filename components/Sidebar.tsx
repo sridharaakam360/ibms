@@ -1,5 +1,6 @@
 import React from 'react';
 import { ViewState } from '../types';
+import { useAuth } from '../src/contexts/AuthContext';
 
 interface SidebarProps {
   currentView: ViewState;
@@ -14,12 +15,17 @@ const IconBriefcase = () => <svg width="20" height="20" viewBox="0 0 24 24" fill
 const IconChart = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>;
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isOpen, setIsOpen }) => {
-  const links = [
-    { id: ViewState.DASHBOARD, name: 'Dashboard', icon: <IconHome /> },
-    { id: ViewState.INVESTORS, name: 'Investors', icon: <IconUsers /> },
-    { id: ViewState.PORTFOLIOS, name: 'Portfolios', icon: <IconBriefcase /> },
-    { id: ViewState.REPORTS, name: 'Reports', icon: <IconChart /> },
+  const { isSuperAdmin } = useAuth();
+
+  const allLinks = [
+    { id: ViewState.DASHBOARD, name: 'Dashboard', icon: <IconHome />, requiresSuperAdmin: true },
+    { id: ViewState.INVESTORS, name: 'Investors', icon: <IconUsers />, requiresSuperAdmin: false },
+    { id: ViewState.PORTFOLIOS, name: 'Portfolios', icon: <IconBriefcase />, requiresSuperAdmin: true },
+    { id: ViewState.REPORTS, name: 'Reports', icon: <IconChart />, requiresSuperAdmin: true },
   ];
+
+  // Filter links based on user role
+  const links = allLinks.filter(link => !link.requiresSuperAdmin || isSuperAdmin);
 
   return (
     <div className={`fixed inset-y-0 left-0 z-30 w-64 bg-white shadow-xl transition-transform duration-300 transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:inset-0`}>

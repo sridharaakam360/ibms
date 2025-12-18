@@ -8,6 +8,10 @@ export interface BankAccount {
   accountHolderName: string;
   accountNumber: string;
   passbookFile?: File | null;
+  isActive?: boolean;
+  subMarketorId?: string;
+  portfolioId?: string;
+  investorId?: string;
 }
 
 export interface OtherDocument {
@@ -64,6 +68,7 @@ export interface Investor {
 
 export interface SubMarketor {
   id: string;
+  portfolioId?: string;
   name: string;
   phone: string;
   email: string;
@@ -72,16 +77,21 @@ export interface SubMarketor {
   address?: string;
   city?: string;
   state?: string;
+  pincode?: string;
+  commissionRate?: number;
+  isActive?: boolean;
   bankAccounts: BankAccount[];
 }
 
 export interface Portfolio {
   id: string;
   name: string;
+  description?: string;
   email: string;
   phone: string;
   totalRaised: string;
   investorCount: number;
+  defaultCommissionRate?: number;
   logo?: File | null;
   subMarketors: SubMarketor[];
   pan?: string;
@@ -89,7 +99,11 @@ export interface Portfolio {
   address?: string;
   city?: string;
   state?: string;
+  pincode?: string;
+  isActive?: boolean;
   bankAccounts: BankAccount[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AdminProfile {

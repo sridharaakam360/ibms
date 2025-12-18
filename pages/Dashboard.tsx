@@ -1,30 +1,59 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import Card from '../components/Card';
 import Table, { Column } from '../components/Table';
-import { INITIAL_INVESTORS, INITIAL_PORTFOLIOS } from '../constants';
+import { investorsAPI, portfoliosAPI } from '../src/services/api';
 import { Investor, Portfolio } from '../types';
 
 const Dashboard: React.FC = () => {
+  const [investors, setInvestors] = useState<Investor[]>([]);
+  const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch investors and portfolios
+  useEffect(() => {
+    let mounted = true;
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        const [invData, portData] = await Promise.all([
+          investorsAPI.getAll(),
+          portfoliosAPI.getAll()
+        ]);
+        if (!mounted) return;
+        setInvestors(invData || []);
+        setPortfolios(portData || []);
+      } catch (err: any) {
+        console.error('Failed to load dashboard data', err);
+        setError(err?.message || 'Failed to load data');
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    };
+    fetchData();
+    return () => { mounted = false; };
+  }, []);
+
   // --- Calculations ---
   
   // 1. Total Funds
-  const totalFunds = INITIAL_INVESTORS.reduce((acc, curr) => {
-    return acc + curr.investments.reduce((sum, inv) => sum + Number(inv.amount || 0), 0);
+  const totalFunds = investors.reduce((acc, curr) => {
+    return acc + ((curr.investments?.reduce((sum, inv) => sum + Number(inv.amount || 0), 0)) || 0);
   }, 0);
 
   // 2. Funds Raised Last 30 Days
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   
-  const fundsLast30Days = INITIAL_INVESTORS.reduce((acc, curr) => {
-    return acc + curr.investments.reduce((sum, inv) => {
+  const fundsLast30Days = investors.reduce((acc, curr) => {
+    return acc + ((curr.investments?.reduce((sum, inv) => {
       const invDate = new Date(inv.startDate);
       return invDate >= thirtyDaysAgo ? sum + Number(inv.amount || 0) : sum;
-    }, 0);
+    }, 0)) || 0);
   }, 0);
 
   // 3. Total Investors
-  const totalInvestors = INITIAL_INVESTORS.length;
+  const totalInvestors = investors.length; 
 
   // 4-7. December Payout Calculations (Monthly Estimate)
   // Assuming Interest Rate and Commissions are Annual % paid monthly
@@ -32,8 +61,8 @@ const Dashboard: React.FC = () => {
   let decPayoutPortfolios = 0;
   let decPayoutSubMarketers = 0;
 
-  INITIAL_INVESTORS.forEach(inv => {
-      inv.investments.forEach(deal => {
+  investors.forEach(inv => {
+      (inv.investments || []).forEach(deal => {
           const amount = Number(deal.amount || 0);
           
           // Investor Interest: (Principal * Rate%) / 12
@@ -52,28 +81,16 @@ const Dashboard: React.FC = () => {
 
   const decTotalPayout = decPayoutInvestors + decPayoutPortfolios + decPayoutSubMarketers;
 
-  const formatCurrency = (val: number) => {
-      if (val >= 10000000) return `₹${(val / 10000000).toFixed(2)} Cr`;
-      if (val >= 100000) return `₹${(val / 100000).toFixed(2)} L`;
-      return `₹${Math.round(val).toLocaleString('en-IN')}`;
-  };
-
-  const formatCurrencyCompact = (val: number) => {
-      if (val >= 10000000) return `₹${(val / 10000000).toFixed(2)} Cr`;
-      if (val >= 100000) return `₹${(val / 100000).toFixed(2)} L`;
-      return `₹${(val/1000).toFixed(1)}k`;
-  };
-
   // --- Portfolio Aggregation for Table ---
   const portfolioTableData = useMemo(() => {
-      return INITIAL_PORTFOLIOS.map(p => {
+      return portfolios.map(p => {
           let pTotal = 0;
-          let pInvestors = new Set();
+          let pInvestors = new Set<string>();
           
-          INITIAL_INVESTORS.forEach(inv => {
-              inv.investments.forEach(deal => {
+          investors.forEach(inv => {
+              (inv.investments || []).forEach(deal => {
                   if (deal.portfolioId === p.id) {
-                      pTotal += Number(deal.amount);
+                      pTotal += Number(deal.amount || 0);
                       pInvestors.add(inv.id);
                   }
               });
@@ -86,7 +103,7 @@ const Dashboard: React.FC = () => {
               investorCount: pInvestors.size
           };
       }).sort((a, b) => b.totalInvestment - a.totalInvestment);
-  }, []);
+  }, [portfolios, investors]);
 
   const portfolioColumns: Column<typeof portfolioTableData[0]>[] = [
       {
@@ -103,6 +120,42 @@ const Dashboard: React.FC = () => {
           className: 'text-xs text-center'
       }
   ];
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-lg">
+          <p className="font-semibold">Error loading dashboard</p>
+          <p className="text-sm mt-1">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const formatCurrency = (val: number) => {
+      if (val >= 10000000) return `₹${(val / 10000000).toFixed(2)} Cr`;
+      if (val >= 100000) return `₹${(val / 100000).toFixed(2)} L`;
+      return `₹${Math.round(val).toLocaleString('en-IN')}`;
+  };
+
+  const formatCurrencyCompact = (val: number) => {
+      if (val >= 10000000) return `₹${(val / 10000000).toFixed(2)} Cr`;
+      if (val >= 100000) return `₹${(val / 100000).toFixed(2)} L`;
+      return `₹${(val/1000).toFixed(1)}k`;
+  };
+
+
 
   // --- Custom Stock Chart Component ---
   const StockChart = () => {

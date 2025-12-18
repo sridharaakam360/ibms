@@ -1,8 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Card from '../components/Card';
 import Table, { Column } from '../components/Table';
-import { Investor, BankAccount, Investment } from '../types';
-import { INITIAL_INVESTORS, INITIAL_PORTFOLIOS } from '../constants';
+import { Investor, BankAccount, Investment, OtherDocument, Portfolio } from '../types';
+import { investorsAPI, portfoliosAPI } from '../src/services/api';
+
+// Mock Data for Locations
+const INDIA_LOCATIONS: Record<string, string[]> = {
+  "Andhra Pradesh": ["Anantapur", "Chittoor", "East Godavari", "Guntur", "Krishna", "Kurnool", "Nellore", "Prakasam", "Srikakulam", "Visakhapatnam", "Vizianagaram", "West Godavari", "YSR Kadapa"],
+  "Karnataka": ["Bagalkot", "Ballari", "Belagavi", "Bengaluru Rural", "Bengaluru Urban", "Bidar", "Chamarajanagar", "Chikkaballapura", "Chikkamagaluru", "Chitradurga", "Dakshina Kannada", "Davanagere", "Dharwad", "Gadag", "Hassan", "Haveri", "Kalaburagi", "Kodagu", "Kolar", "Koppal", "Mandya", "Mysuru", "Raichur", "Ramanagara", "Shivamogga", "Tumakuru", "Udupi", "Uttara Kannada", "Vijayapura", "Yadgir"],
+  "Maharashtra": ["Ahmednagar", "Akola", "Amravati", "Aurangabad", "Beed", "Bhandara", "Buldhana", "Chandrapur", "Dhule", "Gadchiroli", "Gondia", "Hingoli", "Jalgaon", "Jalna", "Kolhapur", "Latur", "Mumbai City", "Mumbai Suburban", "Nagpur", "Nanded", "Nandurbar", "Nashik", "Osmanabad", "Palghar", "Parbhani", "Pune", "Raigad", "Ratnagiri", "Sangli", "Satara", "Sindhudurg", "Solapur", "Thane", "Wardha", "Washim", "Yavatmal"],
+  "Tamil Nadu": ["Ariyalur", "Chengalpattu", "Chennai", "Coimbatore", "Cuddalore", "Dharmapuri", "Dindigul", "Erode", "Kallakurichi", "Kanchipuram", "Kanyakumari", "Karur", "Krishnagiri", "Madurai", "Mayiladuthurai", "Nagapattinam", "Namakkal", "Nilgiris", "Perambalur", "Pudukkottai", "Ramanathapuram", "Ranipet", "Salem", "Sivaganga", "Tenkasi", "Thanjavur", "Theni", "Thoothukudi", "Tiruchirappalli", "Tirunelveli", "Tirupathur", "Tiruppur", "Tiruvallur", "Tiruvannamalai", "Tiruvarur", "Vellore", "Viluppuram", "Virudhunagar"],
+  "Delhi": ["Central Delhi", "East Delhi", "New Delhi", "North Delhi", "North East Delhi", "North West Delhi", "Shahdara", "South Delhi", "South East Delhi", "South West Delhi", "West Delhi"],
+  "Other": ["Other"]
+};
 
 const INITIAL_FORM_STATE: Investor = {
   id: '',
@@ -19,33 +29,293 @@ interface InvestorsProps {
 }
 
 const Investors: React.FC<InvestorsProps> = ({ adminBanks = [] }) => {
-  const [investors, setInvestors] = useState<Investor[]>(INITIAL_INVESTORS);
+  const [investors, setInvestors] = useState<Investor[]>([]);
+  const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [selectedInvestor, setSelectedInvestor] = useState<Investor | null>(null);
   const [formData, setFormData] = useState<Investor>(INITIAL_FORM_STATE);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch investors and portfolios on component mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const [investorsData, portfoliosData] = await Promise.all([
+          investorsAPI.getAll(),
+          portfoliosAPI.getAll()
+        ]);
+        setInvestors(investorsData);
+        setPortfolios(portfoliosData);
+      } catch (err: any) {
+        console.error('Error fetching data:', err);
+        setError(err.message || 'Failed to load data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   const formatCurrency = (amount: string | number) => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(amount || 0));
   };
 
-  const handleEdit = (investor: Investor) => {
-      setFormData(investor);
-      setIsEditing(true);
-      setShowForm(true);
-      setSelectedInvestor(null);
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isEditing) {
-        setInvestors(prev => prev.map(inv => inv.id === formData.id ? formData : inv));
-    } else {
-        setInvestors([...investors, { ...formData, id: Math.random().toString(36).substr(2, 9), kycStatus: 'Verified' }]);
+  const handleStateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newState = e.target.value;
+    setFormData(prev => ({ ...prev, state: newState, district: '', city: '' }));
+  };
+
+  const handleMainFileChange = (e: React.ChangeEvent<HTMLInputElement>, docType: keyof Pick<NonNullable<Investor['kycDocuments']>, 'photo' | 'aadharCard' | 'panCard'>) => {
+    if (e.target.files && e.target.files[0]) {
+        setFormData(prev => ({
+            ...prev,
+            kycDocuments: {
+                ...prev.kycDocuments!,
+                [docType]: e.target.files![0]
+            }
+        }));
     }
-    setShowForm(false);
-    setIsEditing(false);
-    setFormData(INITIAL_FORM_STATE);
+  };
+
+  const handleInvestmentChange = (index: number, field: keyof Investment, value: string) => {
+      const updatedInvestments = [...formData.investments];
+      updatedInvestments[index] = { ...updatedInvestments[index], [field]: value };
+
+      if (field === 'portfolioId') {
+          updatedInvestments[index].subMarketorId = '';
+          updatedInvestments[index].subMarketorCommission = '';
+      }
+
+      if (field === 'subMarketorId' && value === '') {
+          updatedInvestments[index].subMarketorCommission = '';
+      }
+
+      setFormData(prev => ({ ...prev, investments: updatedInvestments }));
+  };
+
+  const addInvestment = () => {
+      setFormData(prev => ({
+          ...prev,
+          investments: [...prev.investments, {
+            id: Math.random().toString(36).substr(2, 9),
+            amount: '', startDate: '', endDate: '', interestRate: '',
+            bankAccountId: '', senderBankId: '', payoutDate: '',
+            portfolioId: '', subMarketorId: '', marketorCommission: '', subMarketorCommission: ''
+          }]
+      }));
+  };
+
+  const removeInvestment = (index: number) => {
+      setFormData(prev => ({
+          ...prev,
+          investments: prev.investments.filter((_, i) => i !== index)
+      }));
+  };
+
+  const handleBankChange = (index: number, field: keyof BankAccount, value: string) => {
+    const updatedBanks = [...formData.bankAccounts];
+    updatedBanks[index] = { ...updatedBanks[index], [field]: value };
+    setFormData(prev => ({ ...prev, bankAccounts: updatedBanks }));
+  };
+
+  const handleBankFileChange = (index: number, file: File) => {
+    const updatedBanks = [...formData.bankAccounts];
+    updatedBanks[index] = { ...updatedBanks[index], passbookFile: file };
+    setFormData(prev => ({ ...prev, bankAccounts: updatedBanks }));
+  };
+
+  const addBankAccount = () => {
+    setFormData(prev => ({
+      ...prev,
+      bankAccounts: [...prev.bankAccounts, { id: Math.random().toString(36).substr(2, 9), ifsc: '', bankName: '', branch: '', accountHolderName: '', accountNumber: '', passbookFile: null }]
+    }));
+  };
+
+  const removeBankAccount = (index: number) => {
+    const accountIdToRemove = formData.bankAccounts[index].id;
+    setFormData(prev => ({
+      ...prev,
+      bankAccounts: prev.bankAccounts.filter((_, i) => i !== index),
+      investments: prev.investments.map(inv => {
+          const updates: Partial<Investment> = {};
+          if (inv.bankAccountId === accountIdToRemove) updates.bankAccountId = '';
+          return { ...inv, ...updates };
+      })
+    }));
+  };
+
+  const addOtherDocument = () => {
+    setFormData(prev => ({
+        ...prev,
+        kycDocuments: {
+            ...prev.kycDocuments!,
+            others: [...(prev.kycDocuments?.others || []), { id: Math.random().toString(36).substr(2, 9), docName: '', file: null }]
+        }
+    }));
+  };
+
+  const removeOtherDocument = (index: number) => {
+    const newOthers = formData.kycDocuments!.others.filter((_, i) => i !== index);
+    setFormData(prev => ({
+        ...prev,
+        kycDocuments: { ...prev.kycDocuments!, others: newOthers }
+    }));
+  };
+
+  const handleOtherDocNameChange = (index: number, value: string) => {
+    const newOthers = [...formData.kycDocuments!.others];
+    newOthers[index].docName = value;
+    setFormData(prev => ({
+        ...prev,
+        kycDocuments: { ...prev.kycDocuments!, others: newOthers }
+    }));
+  };
+
+  const handleOtherDocFileChange = (index: number, file: File) => {
+    const newOthers = [...formData.kycDocuments!.others];
+    newOthers[index].file = file;
+    setFormData(prev => ({
+        ...prev,
+        kycDocuments: { ...prev.kycDocuments!, others: newOthers }
+    }));
+  };
+
+  const handleIfscBlur = async (index: number) => {
+    const ifsc = formData.bankAccounts[index].ifsc;
+    if (ifsc && ifsc.length === 11) {
+      try {
+        const response = await fetch(`https://ifsc.razorpay.com/${ifsc}`);
+        if (response.ok) {
+          const data = await response.json();
+          const updatedBanks = [...formData.bankAccounts];
+          updatedBanks[index].bankName = data.BANK;
+          updatedBanks[index].branch = data.BRANCH;
+          setFormData(prev => ({ ...prev, bankAccounts: updatedBanks }));
+        }
+      } catch (error) {
+        console.error("Failed to fetch IFSC details", error);
+      }
+    }
+  };
+
+  const viewFile = (file: File | null | undefined, label: string) => {
+      if (file) {
+          const url = URL.createObjectURL(file);
+          window.open(url, '_blank');
+      } else {
+          alert(`No ${label} file uploaded or available for this entry.`);
+      }
+  };
+
+  const ViewFileButton = ({ file, label }: { file: File | null | undefined, label: string }) => {
+      if (!file) return <span className="text-[10px] text-gray-400 italic px-2">No file</span>;
+      return (
+          <button
+              type="button"
+              onClick={() => viewFile(file, label)}
+              className="text-indigo-600 hover:text-indigo-800 text-xs font-medium border border-indigo-200 px-2 py-1 rounded-lg bg-indigo-50"
+              title={`View ${label}`}
+          >
+              View
+          </button>
+      );
+  };
+
+  const handleEdit = async (investor: Investor) => {
+      try {
+          setIsLoading(true);
+          setError(null);
+          // Fetch complete investor data from backend including all investments and banks
+          const fullData = await investorsAPI.getById(investor.id);
+          setFormData(fullData);
+          setIsEditing(true);
+          setShowForm(true);
+          setSelectedInvestor(null);
+      } catch (err: any) {
+          console.error('Error fetching investor data:', err);
+          setError(err.message || 'Failed to load investor data');
+          alert('Failed to load investor data. Using cached data instead.');
+          // Fallback to cached data
+          setFormData(investor);
+          setIsEditing(true);
+          setShowForm(true);
+          setSelectedInvestor(null);
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      if (isEditing) {
+        // Update investor on server (PUT expects JSON)
+        await investorsAPI.update(formData.id, formData);
+        const fresh = await investorsAPI.getAll();
+        setInvestors(fresh);
+        if (selectedInvestor && selectedInvestor.id === formData.id) {
+          setSelectedInvestor(formData);
+        }
+      } else {
+        // Create investor using FormData for file uploads
+        const fd = new FormData();
+        fd.append('data', JSON.stringify(formData));
+
+        // KYC main files
+        if (formData.kycDocuments?.photo) fd.append('photo', formData.kycDocuments.photo as File);
+        if (formData.kycDocuments?.aadharCard) fd.append('aadharCard', formData.kycDocuments.aadharCard as File);
+        if (formData.kycDocuments?.panCard) fd.append('panCard', formData.kycDocuments.panCard as File);
+
+        // Attach other KYC files (fieldname: other_<doc.id>)
+        if (formData.kycDocuments?.others && formData.kycDocuments.others.length > 0) {
+          formData.kycDocuments.others.forEach(doc => {
+            if (doc.file) fd.append(`other_${doc.id}`, doc.file as File);
+          });
+        }
+
+        // Attach bank passbooks (fieldname: passbook_<bank.id>)
+        if (formData.bankAccounts && formData.bankAccounts.length > 0) {
+          formData.bankAccounts.forEach(bank => {
+            if (bank.passbookFile) fd.append(`passbook_${bank.id}`, bank.passbookFile as File);
+          });
+        }
+
+        await investorsAPI.create(fd);
+        const fresh = await investorsAPI.getAll();
+        setInvestors(fresh);
+      }
+
+      setShowForm(false);
+      setIsEditing(false);
+      setFormData(INITIAL_FORM_STATE);
+      alert('Investor saved successfully');
+    } catch (err: any) {
+      console.error('Save investor failed', err);
+      const msg = err?.message || 'Failed to save investor';
+      setError(msg);
+      alert(msg + '\n(Make sure you are logged in as an admin and the server is running)');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCancel = () => {
+      setShowForm(false);
+      setIsEditing(false);
+      setFormData(INITIAL_FORM_STATE);
   };
 
   const investorColumns: Column<Investor>[] = [
@@ -53,17 +323,20 @@ const Investors: React.FC<InvestorsProps> = ({ adminBanks = [] }) => {
           header: 'Name',
           accessorKey: 'firstName',
           sortable: true,
-          render: (investor) => (
-            <div className="flex items-center">
-                <div className="h-10 w-10 flex-shrink-0 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm">
-                {investor.firstName[0]}{investor.lastName[0]}
-                </div>
-                <div className="ml-4">
-                <div className="text-sm font-bold text-navy-700">{investor.firstName} {investor.lastName}</div>
-                <div className="text-xs text-gray-500">{investor.city}, {investor.state}</div>
-                </div>
-            </div>
-          )
+          render: (investor) => {
+            const initials = `${investor.firstName?.[0] ?? ''}${investor.lastName?.[0] ?? ''}`;
+            return (
+              <div className="flex items-center">
+                  <div className="h-10 w-10 flex-shrink-0 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm">
+                    {initials || '?'}
+                  </div>
+                  <div className="ml-4">
+                    <div className="text-sm font-bold text-navy-700">{(investor.firstName || '') + (investor.lastName ? ' ' + investor.lastName : '')}</div>
+                    <div className="text-xs text-gray-500">{investor.city || '-'}{investor.city || investor.state ? ', ' : ''}{investor.state || ''}</div>
+                  </div>
+              </div>
+            );
+          }
       },
       { header: 'Contact', accessorKey: 'mobile', sortable: true },
       { header: 'KYC Status', accessorKey: 'kycStatus', sortable: true, render: (inv) => (
@@ -76,32 +349,243 @@ const Investors: React.FC<InvestorsProps> = ({ adminBanks = [] }) => {
           className: "text-right",
           render: (investor) => (
             <div className="flex items-center justify-end gap-2">
-                <button onClick={() => handleEdit(investor)} className="text-gray-400 hover:text-indigo-600 p-2"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
-                <button onClick={() => setSelectedInvestor(investor)} className="text-gray-400 hover:text-navy-700 p-2"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg></button>
+                <button
+                    onClick={() => setSelectedInvestor(investor)}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition shadow-sm"
+                    title="View Dashboard"
+                >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    Dashboard
+                </button>
+                <button
+                    onClick={() => handleEdit(investor)}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-pink-500 text-white text-xs font-bold rounded-lg hover:bg-pink-600 transition shadow-sm"
+                    title="Edit Investor"
+                >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                    Edit
+                </button>
             </div>
           )
       }
   ];
 
   if (selectedInvestor) {
+      const totalInvested = selectedInvestor.investments.reduce((sum, inv) => sum + Number(inv.amount || 0), 0);
+      const activeInvestments = selectedInvestor.investments.length;
+      const initials = `${selectedInvestor.firstName?.[0] ?? ''}${selectedInvestor.lastName?.[0] ?? ''}`;
+
       return (
           <div className="space-y-6 animate-fade-in-up">
-              <button onClick={() => setSelectedInvestor(null)} className="text-indigo-600 font-bold text-sm mb-4">← Back to List</button>
-              <Card title={`${selectedInvestor.firstName}'s Portfolio`}>
-                  <Table 
+              <button onClick={() => setSelectedInvestor(null)} className="text-indigo-600 font-bold text-sm mb-4 flex items-center gap-2 hover:gap-3 transition-all">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                  </svg>
+                  Back to List
+              </button>
+
+              {/* Profile Card */}
+              <Card title="Investor Profile">
+                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                      {/* Avatar Section */}
+                      <div className="flex flex-col items-center justify-center space-y-3">
+                          <div className="h-32 w-32 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold text-4xl shadow-lg">
+                              {initials || '?'}
+                          </div>
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${selectedInvestor.kycStatus === 'Verified' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}>
+                              {selectedInvestor.kycStatus}
+                          </span>
+                      </div>
+
+                      {/* Personal Details */}
+                      <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                              <label className="text-xs font-bold text-gray-500 uppercase">Full Name</label>
+                              <p className="text-sm font-semibold text-gray-900">{selectedInvestor.firstName} {selectedInvestor.lastName}</p>
+                          </div>
+                          <div>
+                              <label className="text-xs font-bold text-gray-500 uppercase">Gender</label>
+                              <p className="text-sm font-semibold text-gray-900">{selectedInvestor.gender || '-'}</p>
+                          </div>
+                          <div>
+                              <label className="text-xs font-bold text-gray-500 uppercase">Date of Birth</label>
+                              <p className="text-sm font-semibold text-gray-900">{selectedInvestor.dob || '-'}</p>
+                          </div>
+                          <div>
+                              <label className="text-xs font-bold text-gray-500 uppercase">Mobile</label>
+                              <p className="text-sm font-semibold text-gray-900">{selectedInvestor.mobile || '-'}</p>
+                          </div>
+                          <div>
+                              <label className="text-xs font-bold text-gray-500 uppercase">Email</label>
+                              <p className="text-sm font-semibold text-gray-900">{selectedInvestor.email || '-'}</p>
+                          </div>
+                          <div>
+                              <label className="text-xs font-bold text-gray-500 uppercase">PAN</label>
+                              <p className="text-sm font-semibold text-gray-900">{selectedInvestor.pan || '-'}</p>
+                          </div>
+                          <div>
+                              <label className="text-xs font-bold text-gray-500 uppercase">Aadhar</label>
+                              <p className="text-sm font-semibold text-gray-900">{selectedInvestor.aadhar || '-'}</p>
+                          </div>
+                          <div>
+                              <label className="text-xs font-bold text-gray-500 uppercase">Pincode</label>
+                              <p className="text-sm font-semibold text-gray-900">{selectedInvestor.pincode || '-'}</p>
+                          </div>
+                          <div className="md:col-span-2">
+                              <label className="text-xs font-bold text-gray-500 uppercase">Address</label>
+                              <p className="text-sm font-semibold text-gray-900">
+                                  {selectedInvestor.address || '-'}, {selectedInvestor.city || '-'}, {selectedInvestor.state || '-'}
+                              </p>
+                          </div>
+                      </div>
+                  </div>
+              </Card>
+
+              {/* Statistics */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-xl shadow-lg text-white">
+                      <div className="text-sm font-medium opacity-90">Total Invested</div>
+                      <div className="text-3xl font-bold mt-2">{formatCurrency(totalInvested)}</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-green-500 to-green-600 p-6 rounded-xl shadow-lg text-white">
+                      <div className="text-sm font-medium opacity-90">Active Investments</div>
+                      <div className="text-3xl font-bold mt-2">{activeInvestments}</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-purple-500 to-purple-600 p-6 rounded-xl shadow-lg text-white">
+                      <div className="text-sm font-medium opacity-90">Bank Accounts</div>
+                      <div className="text-3xl font-bold mt-2">{selectedInvestor.bankAccounts?.length || 0}</div>
+                  </div>
+              </div>
+
+              {/* Investments Table */}
+              <Card title="Investment Details">
+                  <Table<Investment>
                       columns={[
                           { header: 'Amount', accessorKey: 'amount', render: (i) => <span className="font-bold">{formatCurrency(i.amount)}</span>, sortable: true },
-                          { header: 'Rate', accessorKey: 'interestRate', render: (i) => `${i.interestRate}%`, sortable: true },
-                          { header: 'Start', accessorKey: 'startDate', sortable: true },
-                          { header: 'End', accessorKey: 'endDate', sortable: true }
+                          { header: 'Interest Rate', accessorKey: 'interestRate', render: (i) => `${i.interestRate}%`, sortable: true },
+                          { header: 'Start Date', accessorKey: 'startDate', sortable: true },
+                          { header: 'End Date', accessorKey: 'endDate', sortable: true },
+                          { header: 'Payout Date', accessorKey: 'payoutDate', render: (i) => i.payoutDate || '-', sortable: true },
+                          {
+                              header: 'Marketer',
+                              render: (i) => {
+                                  const portfolio = portfolios.find(p => p.id === i.portfolioId);
+                                  return portfolio?.name || '-';
+                              }
+                          },
+                          {
+                              header: 'Sub-Marketer',
+                              render: (i) => {
+                                  if (!i.portfolioId || !i.subMarketorId) return '-';
+                                  const portfolio = portfolios.find(p => p.id === i.portfolioId);
+                                  const subMarketor = portfolio?.subMarketors?.find(s => s.id === i.subMarketorId);
+                                  return subMarketor?.name || '-';
+                              }
+                          }
                       ]}
                       data={selectedInvestor.investments}
                       keyExtractor={(i) => i.id}
                       searchable={true}
                   />
               </Card>
+
+              {/* Bank Accounts */}
+              <Card title="Bank Accounts">
+                  {selectedInvestor.bankAccounts && selectedInvestor.bankAccounts.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {selectedInvestor.bankAccounts.map(bank => (
+                              <div key={bank.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                  <div className="font-bold text-gray-900 mb-2">{bank.bankName}</div>
+                                  <div className="space-y-1 text-sm">
+                                      <div><span className="text-gray-500">IFSC:</span> <span className="font-semibold">{bank.ifsc}</span></div>
+                                      <div><span className="text-gray-500">Branch:</span> <span className="font-semibold">{bank.branch}</span></div>
+                                      <div><span className="text-gray-500">Account Holder:</span> <span className="font-semibold">{bank.accountHolderName}</span></div>
+                                      <div><span className="text-gray-500">Account Number:</span> <span className="font-semibold">{bank.accountNumber ? '****' + bank.accountNumber.slice(-4) : '----'}</span></div>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  ) : (
+                      <p className="text-gray-500 text-sm">No bank accounts on file</p>
+                  )}
+              </Card>
+
+              {/* KYC Documents */}
+              <Card title="KYC Documents">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="border border-gray-200 rounded-lg p-4">
+                          <div className="text-sm font-bold text-gray-700 mb-2">Photo</div>
+                          <ViewFileButton file={selectedInvestor.kycDocuments?.photo} label="Photo" />
+                      </div>
+                      <div className="border border-gray-200 rounded-lg p-4">
+                          <div className="text-sm font-bold text-gray-700 mb-2">Aadhar Card</div>
+                          <ViewFileButton file={selectedInvestor.kycDocuments?.aadharCard} label="Aadhar Card" />
+                      </div>
+                      <div className="border border-gray-200 rounded-lg p-4">
+                          <div className="text-sm font-bold text-gray-700 mb-2">PAN Card</div>
+                          <ViewFileButton file={selectedInvestor.kycDocuments?.panCard} label="PAN Card" />
+                      </div>
+                  </div>
+                  {selectedInvestor.kycDocuments?.others && selectedInvestor.kycDocuments.others.length > 0 && (
+                      <div className="mt-4">
+                          <div className="text-sm font-bold text-gray-700 mb-2">Other Documents</div>
+                          <div className="space-y-2">
+                              {selectedInvestor.kycDocuments.others.map(doc => (
+                                  <div key={doc.id} className="flex items-center justify-between border border-gray-200 rounded-lg p-3 bg-gray-50">
+                                      <span className="text-sm font-semibold">{doc.docName}</span>
+                                      <ViewFileButton file={doc.file} label={doc.docName} />
+                                  </div>
+                              ))}
+                          </div>
+                      </div>
+                  )}
+              </Card>
+
+              {/* Edit Button at Bottom */}
+              <div className="flex justify-end">
+                  <button
+                      onClick={() => handleEdit(selectedInvestor)}
+                      className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition shadow-lg"
+                  >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                      Edit Investor
+                  </button>
+              </div>
           </div>
       );
+  }
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+          <p className="text-gray-600">Loading investors...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-lg">
+            <p className="font-semibold">Error loading data</p>
+            <p className="text-sm mt-1">{error}</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -113,12 +597,230 @@ const Investors: React.FC<InvestorsProps> = ({ adminBanks = [] }) => {
       </div>
 
       {showForm && (
-        <Card title={isEditing ? "Edit Profile" : "New Profile"}>
-            <form onSubmit={handleSubmit} className="p-4 text-center">
-                <p className="text-gray-400">Investor form logic preserved. Add required inputs here.</p>
-                <div className="mt-4 flex gap-4 justify-center">
-                    <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2">Cancel</button>
-                    <button type="submit" className="px-6 py-2 bg-indigo-600 text-white rounded-xl">Save</button>
+        <Card title={isEditing ? "Edit Investor Details" : "Add New Investor Details"} className="animate-fade-in-down">
+            <form onSubmit={handleSubmit}>
+                 <h5 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Personal Information (Mandatory)</h5>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+                    <div><label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label><input name="firstName" value={formData.firstName} required className="w-full rounded-xl border border-gray-200 px-4 py-3" onChange={handleInputChange} /></div>
+                    <div><label className="block text-sm font-medium text-gray-700 mb-2">Last Name *</label><input name="lastName" value={formData.lastName} required className="w-full rounded-xl border border-gray-200 px-4 py-3" onChange={handleInputChange} /></div>
+                    <div><label className="block text-sm font-medium text-gray-700 mb-2">Gender *</label><select name="gender" value={formData.gender} required className="w-full rounded-xl border border-gray-200 px-4 py-3" onChange={handleInputChange}><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option></select></div>
+                    <div><label className="block text-sm font-medium text-gray-700 mb-2">DOB *</label><input name="dob" type="date" value={formData.dob} required className="w-full rounded-xl border border-gray-200 px-4 py-3" onChange={handleInputChange} /></div>
+                    <div><label className="block text-sm font-medium text-gray-700 mb-2">Mobile *</label><input name="mobile" value={formData.mobile} required className="w-full rounded-xl border border-gray-200 px-4 py-3" onChange={handleInputChange} /></div>
+                    <div><label className="block text-sm font-medium text-gray-700 mb-2">Email *</label><input name="email" value={formData.email} required className="w-full rounded-xl border border-gray-200 px-4 py-3" onChange={handleInputChange} /></div>
+                    <div><label className="block text-sm font-medium text-gray-700 mb-2">Aadhar *</label><input name="aadhar" value={formData.aadhar} required className="w-full rounded-xl border border-gray-200 px-4 py-3" onChange={handleInputChange} /></div>
+                    <div><label className="block text-sm font-medium text-gray-700 mb-2">PAN *</label><input name="pan" value={formData.pan} required className="w-full rounded-xl border border-gray-200 px-4 py-3" onChange={handleInputChange} /></div>
+                </div>
+
+                <h5 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Address</h5>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+                    <div className="lg:col-span-3"><label className="block text-sm font-medium text-gray-700 mb-2">Address *</label><input name="address" value={formData.address} required className="w-full rounded-xl border border-gray-200 px-4 py-3" onChange={handleInputChange} /></div>
+                    <div><label className="block text-sm font-medium text-gray-700 mb-2">State *</label><select name="state" value={formData.state} required className="w-full rounded-xl border border-gray-200 px-4 py-3" onChange={handleStateChange}><option value="">Select</option>{Object.keys(INDIA_LOCATIONS).map(s=><option key={s} value={s}>{s}</option>)}</select></div>
+                    <div><label className="block text-sm font-medium text-gray-700 mb-2">City *</label><input name="city" value={formData.city} required className="w-full rounded-xl border border-gray-200 px-4 py-3" onChange={handleInputChange} /></div>
+                    <div><label className="block text-sm font-medium text-gray-700 mb-2">Pincode *</label><input name="pincode" value={formData.pincode} required className="w-full rounded-xl border border-gray-200 px-4 py-3" onChange={handleInputChange} /></div>
+                </div>
+
+                <h5 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2 flex justify-between">
+                    Bank Details (Mandatory)
+                    <button type="button" onClick={addBankAccount} className="text-sm bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg hover:bg-indigo-100 transition">+ Add Bank</button>
+                </h5>
+                {formData.bankAccounts.map((bank, index) => (
+                    <div key={bank.id} className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-100 relative">
+                        {formData.bankAccounts.length > 1 && (
+                            <button type="button" onClick={() => removeBankAccount(index)} className="absolute top-2 right-2 text-red-400 hover:text-red-600">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            </button>
+                        )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                             <div className="lg:col-span-1">
+                                <label className="block text-xs font-bold text-gray-500 mb-1">IFSC Code *</label>
+                                <input value={bank.ifsc} required onChange={(e) => handleBankChange(index, 'ifsc', e.target.value)} onBlur={() => handleIfscBlur(index)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+                            </div>
+                            <div className="lg:col-span-1"><label className="block text-xs font-bold text-gray-500 mb-1">Bank Name *</label><input value={bank.bankName} required onChange={(e) => handleBankChange(index, 'bankName', e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" /></div>
+                            <div className="lg:col-span-1"><label className="block text-xs font-bold text-gray-500 mb-1">Branch *</label><input value={bank.branch} required onChange={(e) => handleBankChange(index, 'branch', e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" /></div>
+                            <div className="lg:col-span-1"><label className="block text-xs font-bold text-gray-500 mb-1">Holder Name *</label><input value={bank.accountHolderName} required onChange={(e) => handleBankChange(index, 'accountHolderName', e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" /></div>
+                            <div className="lg:col-span-1"><label className="block text-xs font-bold text-gray-500 mb-1">Account No *</label><input value={bank.accountNumber} required onChange={(e) => handleBankChange(index, 'accountNumber', e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" /></div>
+                            <div className="lg:col-span-1 relative">
+                                <label className="block text-xs font-bold text-gray-500 mb-1">Passbook *</label>
+                                <input type="file" required={!isEditing} accept=".pdf,image/*" onChange={(e) => e.target.files && handleBankFileChange(index, e.target.files[0])} className="w-full text-xs text-gray-500" />
+                                <div className="absolute top-6 right-0"><ViewFileButton file={bank.passbookFile} label="Passbook" /></div>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+
+                 <h5 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2 pt-4">KYC Documents</h5>
+                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+                    <div><label className="block text-sm font-bold mb-2">Photo</label><input type="file" onChange={(e)=>handleMainFileChange(e, 'photo')} className="text-sm" /></div>
+                    <div><label className="block text-sm font-bold mb-2">Aadhar</label><input type="file" onChange={(e)=>handleMainFileChange(e, 'aadharCard')} className="text-sm" /></div>
+                    <div><label className="block text-sm font-bold mb-2">PAN</label><input type="file" onChange={(e)=>handleMainFileChange(e, 'panCard')} className="text-sm" /></div>
+                 </div>
+
+                 <h5 className="text-sm font-bold text-gray-800 mt-2 mb-2 flex justify-between items-center border-t pt-4">
+                    Other Documents
+                    <button type="button" onClick={addOtherDocument} className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100">+ Add Document</button>
+                 </h5>
+                 {formData.kycDocuments?.others.map((doc, index) => (
+                    <div key={doc.id} className="flex gap-4 mb-3 items-end bg-gray-50 p-3 rounded-lg relative group">
+                         <button type="button" onClick={() => removeOtherDocument(index)} className="absolute top-1 right-1 text-gray-400 hover:text-red-500">
+                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                         </button>
+                        <div className="flex-1">
+                            <label className="text-xs font-bold block text-gray-500 mb-1">Document Name</label>
+                            <input value={doc.docName} onChange={(e) => handleOtherDocNameChange(index, e.target.value)} className="w-full border rounded p-2 text-sm" placeholder="e.g. Driving License" />
+                        </div>
+                        <div className="flex-1">
+                            <label className="text-xs font-bold block text-gray-500 mb-1">File Upload</label>
+                            <input type="file" onChange={(e) => e.target.files && handleOtherDocFileChange(index, e.target.files[0])} className="w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700" />
+                        </div>
+                        {doc.file && <div className="mb-1"><ViewFileButton file={doc.file} label={doc.docName || 'File'} /></div>}
+                    </div>
+                 ))}
+
+                 <h5 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2 flex justify-between mt-6">Investments <button type="button" onClick={addInvestment} className="text-sm text-indigo-600">+ Add</button></h5>
+                 {formData.investments.map((inv, i) => {
+                     const rowAvailableSubMarketors = inv.portfolioId
+                        ? portfolios.find(p => p.id === inv.portfolioId)?.subMarketors || []
+                        : [];
+
+                     return (
+                     <div key={inv.id} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4 bg-gray-50 p-4 rounded-xl relative">
+                        {i > 0 && <button type="button" onClick={()=>removeInvestment(i)} className="absolute top-2 right-2 text-red-500">x</button>}
+
+                        <div>
+                           <label className="block text-xs font-bold text-gray-500 mb-1">Amount</label>
+                           <input type="number" placeholder="₹" value={inv.amount} onChange={(e)=>handleInvestmentChange(i, 'amount', e.target.value)} className="w-full p-2 rounded border" />
+                        </div>
+
+                        <div>
+                           <label className="block text-xs font-bold text-gray-500 mb-1">Interest Rate %</label>
+                           <input type="number" placeholder="%" value={inv.interestRate} onChange={(e)=>handleInvestmentChange(i, 'interestRate', e.target.value)} className="w-full p-2 rounded border" />
+                        </div>
+
+                        <div>
+                           <label className="block text-xs font-bold text-gray-500 mb-1">Start Date</label>
+                           <input type="date" value={inv.startDate} onChange={(e)=>handleInvestmentChange(i, 'startDate', e.target.value)} className="w-full p-2 rounded border" />
+                        </div>
+
+                        <div>
+                           <label className="block text-xs font-bold text-gray-500 mb-1">End Date</label>
+                           <input type="date" value={inv.endDate} onChange={(e)=>handleInvestmentChange(i, 'endDate', e.target.value)} className="w-full p-2 rounded border" />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">Payout Type (Date)</label>
+                            <select
+                                value={inv.payoutDate || ''}
+                                onChange={(e) => handleInvestmentChange(i, 'payoutDate', e.target.value)}
+                                className="w-full p-2 rounded border bg-white"
+                            >
+                                <option value="">Select Date</option>
+                                <option value="10th">10th</option>
+                                <option value="20th">20th</option>
+                                <option value="30th">30th</option>
+                            </select>
+                        </div>
+
+                        <div>
+                             <label className="block text-xs font-bold text-gray-500 mb-1">Sender Bank (Admin)</label>
+                             <select
+                                value={inv.senderBankId || ''}
+                                onChange={(e) => handleInvestmentChange(i, 'senderBankId', e.target.value)}
+                                className="w-full p-2 rounded border bg-white"
+                            >
+                                <option value="">Select Sender Bank</option>
+                                {adminBanks.map(b => (
+                                    <option key={b.id} value={b.id}>
+                                        {b.bankName} - {b.accountNumber ? '****' + b.accountNumber.slice(-4) : '----'}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">Payout Bank (Investor)</label>
+                            <select
+                                value={inv.bankAccountId || ''}
+                                onChange={(e) => handleInvestmentChange(i, 'bankAccountId', e.target.value)}
+                                className="w-full p-2 rounded border bg-white"
+                            >
+                                <option value="">Select Payout Bank</option>
+                                {formData.bankAccounts.map(b => (
+                                    <option key={b.id} value={b.id}>
+                                        {b.bankName} - {b.accountNumber ? '****' + b.accountNumber.slice(-4) : '----'}
+                                    </option>
+                                ))}
+                            </select>
+                            {inv.bankAccountId && (
+                                <div className="text-[10px] text-gray-500 mt-1 flex justify-between">
+                                    <span>Selected</span>
+                                    {(() => {
+                                        const b = formData.bankAccounts.find(acc => acc.id === inv.bankAccountId);
+                                        return b?.passbookFile ?
+                                            <span className="text-indigo-600 font-bold cursor-pointer" onClick={() => viewFile(b.passbookFile, 'Passbook')}>View Passbook</span> :
+                                            <span>No Passbook</span>
+                                    })()}
+                                </div>
+                            )}
+                        </div>
+
+                         <div className="col-span-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-2 pt-2 border-t border-gray-100">
+                             <div>
+                                <label className="block text-xs font-bold text-gray-500 mb-1">Marketer (Portfolio)</label>
+                                <select
+                                    value={inv.portfolioId || ''}
+                                    onChange={(e) => handleInvestmentChange(i, 'portfolioId', e.target.value)}
+                                    className="w-full p-2 rounded border bg-white"
+                                >
+                                    <option value="">Select Marketer</option>
+                                    {portfolios.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </select>
+                             </div>
+                             <div>
+                                <label className="block text-xs font-bold text-gray-500 mb-1">Sub-Marketer</label>
+                                <select
+                                    value={inv.subMarketorId || ''}
+                                    onChange={(e) => handleInvestmentChange(i, 'subMarketorId', e.target.value)}
+                                    className="w-full p-2 rounded border bg-white disabled:bg-gray-100 disabled:text-gray-400"
+                                    disabled={!inv.portfolioId || rowAvailableSubMarketors.length === 0}
+                                >
+                                    <option value="">None (Direct)</option>
+                                    {rowAvailableSubMarketors.map(sub => (
+                                        <option key={sub.id} value={sub.id}>{sub.name}</option>
+                                    ))}
+                                </select>
+                             </div>
+                             <div>
+                                <label className="block text-xs font-bold text-gray-500 mb-1">Marketer Commission %</label>
+                                <input
+                                    type="number"
+                                    placeholder="%"
+                                    value={inv.marketorCommission || ''}
+                                    onChange={(e)=>handleInvestmentChange(i, 'marketorCommission', e.target.value)}
+                                    className="w-full p-2 rounded border"
+                                />
+                             </div>
+                             <div>
+                                <label className="block text-xs font-bold text-gray-500 mb-1">Sub-Marketer Commission %</label>
+                                <input
+                                    type="number"
+                                    placeholder="%"
+                                    value={inv.subMarketorCommission || ''}
+                                    onChange={(e)=>handleInvestmentChange(i, 'subMarketorCommission', e.target.value)}
+                                    className="w-full p-2 rounded border disabled:bg-gray-100 disabled:text-gray-400"
+                                    disabled={!inv.subMarketorId}
+                                />
+                             </div>
+                         </div>
+                     </div>
+                 )})}
+
+                <div className="flex justify-end gap-3 mt-6">
+                    <button type="button" onClick={handleCancel} className="px-6 py-2 rounded-xl text-gray-600 hover:bg-gray-50 transition">Cancel</button>
+                    <button type="submit" className="px-6 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition font-medium">
+                        {isEditing ? 'Update Profile' : 'Save Profile'}
+                    </button>
                 </div>
             </form>
         </Card>

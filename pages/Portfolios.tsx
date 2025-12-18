@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Card from '../components/Card';
 import Table, { Column } from '../components/Table';
 import { Portfolio, SubMarketor, BankAccount, Investor } from '../types';
-import { INITIAL_PORTFOLIOS, INITIAL_INVESTORS } from '../constants';
+import { portfoliosAPI, investorsAPI } from '../src/services/api';
 
 const INITIAL_BANK_STATE: BankAccount = {
     id: '',
@@ -17,10 +17,12 @@ const INITIAL_BANK_STATE: BankAccount = {
 const INITIAL_FORM_STATE: Portfolio = {
     id: '',
     name: '',
+    description: '',
     email: '',
     phone: '',
     totalRaised: '0',
     investorCount: 0,
+    defaultCommissionRate: 0,
     logo: null,
     subMarketors: [],
     pan: '',
@@ -28,6 +30,7 @@ const INITIAL_FORM_STATE: Portfolio = {
     address: '',
     city: '',
     state: '',
+    pincode: '',
     bankAccounts: [{ ...INITIAL_BANK_STATE, id: 'main_bank_init' }]
 };
 
@@ -41,11 +44,14 @@ const INITIAL_SUB_MARKETOR_STATE: SubMarketor = {
     address: '',
     city: '',
     state: '',
+    pincode: '',
+    commissionRate: 0,
     bankAccounts: [{ ...INITIAL_BANK_STATE, id: 'sub_bank_init' }]
 };
 
 const Portfolios: React.FC = () => {
-  const [portfolios, setPortfolios] = useState<Portfolio[]>(INITIAL_PORTFOLIOS);
+  const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
+  const [investors, setInvestors] = useState<Investor[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Portfolio>(INITIAL_FORM_STATE);
@@ -121,18 +127,50 @@ const Portfolios: React.FC = () => {
       }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isEditing) {
-        setPortfolios(prev => prev.map(p => p.id === formData.id ? formData : p));
-        if (selectedPortfolio && selectedPortfolio.id === formData.id) {
-            setSelectedPortfolio(formData);
+    try {
+        if (isEditing) {
+            // No dedicated update endpoint for portfolios in API, keep local update
+            setPortfolios(prev => prev.map(p => p.id === formData.id ? formData : p));
+            if (selectedPortfolio && selectedPortfolio.id === formData.id) {
+                setSelectedPortfolio(formData);
+            }
+        } else {
+            // Create portfolio on server - send ALL fields including bank accounts
+            const payload = {
+                name: formData.name,
+                description: formData.description || '',
+                email: formData.email || '',
+                phone: formData.phone || '',
+                pan: formData.pan || '',
+                aadhar: formData.aadhar || '',
+                address: formData.address || '',
+                city: formData.city || '',
+                state: formData.state || '',
+                pincode: formData.pincode || '',
+                defaultCommissionRate: formData.defaultCommissionRate || 0,
+                logoFile: null, // TODO: Will add file upload later
+                bankAccounts: formData.bankAccounts.map(bank => ({
+                    ifsc: bank.ifsc || '',
+                    bankName: bank.bankName || '',
+                    branch: bank.branch || '',
+                    accountHolderName: bank.accountHolderName || '',
+                    accountNumber: bank.accountNumber || '',
+                    passbookFile: null // TODO: Will add file upload later
+                }))
+            };
+            const res = await portfoliosAPI.create(payload);
+            // Refetch portfolios
+            const fresh = await portfoliosAPI.getAll();
+            setPortfolios(fresh || []);
+            alert('Portfolio created successfully');
         }
-    } else {
-        const newPortfolio = { ...formData, id: Math.floor(100 + Math.random() * 900).toString() };
-        setPortfolios([newPortfolio, ...portfolios]);
+        handleCancel();
+    } catch (err: any) {
+        console.error('Failed to save portfolio', err);
+        alert((err && err.message) ? (err.message + '\n(You need super admin privileges to create a portfolio)') : 'Failed to save portfolio');
     }
-    handleCancel();
   };
 
   const handleEdit = (portfolio: Portfolio) => {
@@ -153,6 +191,20 @@ const Portfolios: React.FC = () => {
       setIsEditing(false);
       setFormData(INITIAL_FORM_STATE);
   };
+
+  // Fetch portfolios & investors from backend
+  useEffect(() => {
+      const fetchData = async () => {
+          try {
+              const [p, i] = await Promise.all([portfoliosAPI.getAll(), investorsAPI.getAll()]);
+              setPortfolios(p || []);
+              setInvestors(i || []);
+          } catch (err) {
+              console.error('Failed to fetch portfolios/investors', err);
+          }
+      };
+      fetchData();
+  }, []);
 
   // Sub-Marketer Handlers
   const handleSubInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -204,33 +256,55 @@ const Portfolios: React.FC = () => {
     }));
   };
 
-  const handleSaveSubMarketor = (e: React.FormEvent) => {
+  const handleSaveSubMarketor = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!selectedPortfolio) return;
 
-      let updatedSubMarketors = [...selectedPortfolio.subMarketors];
-      
-      if (isEditingSub) {
-          updatedSubMarketors = updatedSubMarketors.map(s => s.id === subFormData.id ? subFormData : s);
-      } else {
-          const sub: SubMarketor = {
-            ...subFormData,
-            id: Math.random().toString(36).substr(2, 9)
-          };
-          updatedSubMarketors.push(sub);
+      try {
+          if (isEditingSub) {
+              // Local update only (no update endpoint for sub-marketors)
+              const updatedSubMarketors = selectedPortfolio.subMarketors.map(s => s.id === subFormData.id ? subFormData : s);
+              const updatedPortfolio = { ...selectedPortfolio, subMarketors: updatedSubMarketors };
+              setPortfolios(prev => prev.map(p => p.id === updatedPortfolio.id ? updatedPortfolio : p));
+              setSelectedPortfolio(updatedPortfolio);
+          } else {
+              // Create sub-marketor on server - send ALL fields including bank accounts
+              const payload = {
+                  name: subFormData.name,
+                  email: subFormData.email || '',
+                  mobile: subFormData.phone || '',
+                  pan: subFormData.pan || '',
+                  aadhar: subFormData.aadhar || '',
+                  address: subFormData.address || '',
+                  city: subFormData.city || '',
+                  state: subFormData.state || '',
+                  pincode: subFormData.pincode || '',
+                  commissionRate: subFormData.commissionRate || 0,
+                  bankAccounts: subFormData.bankAccounts.map(bank => ({
+                      ifsc: bank.ifsc || '',
+                      bankName: bank.bankName || '',
+                      branch: bank.branch || '',
+                      accountHolderName: bank.accountHolderName || '',
+                      accountNumber: bank.accountNumber || '',
+                      passbookFile: null // TODO: Will add file upload later
+                  }))
+              };
+              await portfoliosAPI.addSubMarketor(selectedPortfolio.id, payload);
+              // Refetch portfolios to get the new sub-marketor
+              const fresh = await portfoliosAPI.getAll();
+              setPortfolios(fresh || []);
+              const updated = fresh.find(p => p.id === selectedPortfolio.id);
+              if (updated) setSelectedPortfolio(updated);
+              alert('Sub-marketer created successfully');
+          }
+      } catch (err: any) {
+          console.error('Failed to save sub-marketor', err);
+          alert((err && err.message) ? (err.message + '\n(You need super admin privileges to create a sub-marketer)') : 'Failed to save sub-marketor');
+      } finally {
+          setSubFormData(INITIAL_SUB_MARKETOR_STATE);
+          setShowSubForm(false);
+          setIsEditingSub(false);
       }
-
-      const updatedPortfolio = {
-          ...selectedPortfolio,
-          subMarketors: updatedSubMarketors
-      };
-
-      setPortfolios(prev => prev.map(p => p.id === updatedPortfolio.id ? updatedPortfolio : p));
-      setSelectedPortfolio(updatedPortfolio);
-      
-      setSubFormData(INITIAL_SUB_MARKETOR_STATE);
-      setShowSubForm(false);
-      setIsEditingSub(false);
   };
   
   const handleEditSubMarketor = (sub: SubMarketor) => {
@@ -262,7 +336,7 @@ const Portfolios: React.FC = () => {
       let investorsCount = 0;
       const associatedInvestments: any[] = [];
 
-      INITIAL_INVESTORS.forEach(inv => {
+      investors.forEach(inv => {
           inv.investments.forEach(investment => {
               if (investment.subMarketorId === subId) {
                   raised += Number(investment.amount);
@@ -394,7 +468,11 @@ const Portfolios: React.FC = () => {
               <div className="flex items-center">
                   <div className="h-9 w-9 flex-shrink-0 rounded-full bg-gradient-to-br from-pink-400 to-red-500 flex items-center justify-center text-white font-bold text-sm shadow-sm">
                       {item.logo ? (
-                          <img src={URL.createObjectURL(item.logo)} alt="logo" className="h-full w-full rounded-full object-cover"/>
+                          typeof item.logo === 'string' ? (
+                              <img src={item.logo} alt="logo" className="h-full w-full rounded-full object-cover"/>
+                          ) : (
+                              <img src={URL.createObjectURL(item.logo)} alt="logo" className="h-full w-full rounded-full object-cover"/>
+                          )
                       ) : (
                           item.name.substring(0,2).toUpperCase()
                       )}
@@ -415,7 +493,7 @@ const Portfolios: React.FC = () => {
       },
       {
           header: 'Sub-Marketers',
-          render: (item) => <span className="text-sm text-gray-600 font-bold">{item.subMarketors.length}</span>
+          render: (item) => <span className="text-sm text-gray-600 font-bold">{item.subMarketors?.length || 0}</span>
       },
       {
           header: 'Total Raised',
@@ -504,7 +582,7 @@ const Portfolios: React.FC = () => {
                      <Card>
                         <div className="flex flex-col items-center pb-6 border-b border-gray-100">
                              <div className="h-20 w-20 rounded-full bg-gradient-to-br from-green-400 to-teal-500 flex items-center justify-center text-white font-bold text-2xl mb-4 shadow-lg">
-                                {sub.name.substring(0,2).toUpperCase()}
+                                {sub.name ? sub.name.substring(0,2).toUpperCase() : '??'}
                             </div>
                             <h3 className="text-xl font-bold text-navy-700 text-center">{sub.name}</h3>
                             <p className="text-xs text-gray-500 uppercase font-bold tracking-wider mt-1">Sub-Marketer</p>
@@ -522,11 +600,15 @@ const Portfolios: React.FC = () => {
                                     {sub.email}
                                 </p>
                             </div>
-                            {sub.bankAccounts[0] && (
+                            {(Array.isArray(sub.bankAccounts) && sub.bankAccounts.length > 0) ? (
                                 <div>
                                     <p className="text-xs text-gray-400 uppercase font-bold tracking-wider">Primary Bank</p>
-                                    <p className="text-sm font-medium text-gray-700 mt-1">{sub.bankAccounts[0].bankName}</p>
-                                    <p className="text-xs text-gray-500">Acct: {sub.bankAccounts[0].accountNumber}</p>
+                                    <p className="text-sm font-medium text-gray-700 mt-1">{sub.bankAccounts[0].bankName || 'N/A'}</p>
+                                    <p className="text-xs text-gray-500">Acct: {sub.bankAccounts[0].accountNumber || 'N/A'}</p>
+                                </div>
+                            ) : (
+                                <div>
+                                    <p className="text-sm font-medium text-gray-700 mt-1">No bank information available</p>
                                 </div>
                             )}
                         </div>
@@ -555,7 +637,7 @@ const Portfolios: React.FC = () => {
       let associatedInvestorsCount = 0;
       const associatedInvestments: any[] = [];
 
-      INITIAL_INVESTORS.forEach(inv => {
+      investors.forEach(inv => {
           let hasPortfolioInvestment = false;
           inv.investments.forEach(investment => {
               if (investment.portfolioId === portfolio.id) {
@@ -617,7 +699,7 @@ const Portfolios: React.FC = () => {
                      <Card>
                         <div>
                             <p className="text-gray-500 text-sm font-medium mb-1">Active Sub-Marketers</p>
-                            <h3 className="text-2xl font-bold text-navy-700">{portfolio.subMarketors.length}</h3>
+                            <h3 className="text-2xl font-bold text-navy-700">{portfolio.subMarketors?.length || 0}</h3>
                         </div>
                         <div className="mt-4 flex items-center gap-2">
                              <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
@@ -633,7 +715,11 @@ const Portfolios: React.FC = () => {
                         <div className="flex flex-col items-center pb-6 border-b border-gray-100">
                              <div className="h-24 w-24 rounded-full bg-gradient-to-br from-pink-400 to-red-500 flex items-center justify-center text-white font-bold text-3xl mb-4 shadow-lg">
                                 {portfolio.logo ? (
-                                    <img src={URL.createObjectURL(portfolio.logo)} alt="logo" className="h-full w-full rounded-full object-cover"/>
+                                    (typeof portfolio.logo === 'string') ? (
+                                        <img src={portfolio.logo} alt="logo" className="h-full w-full rounded-full object-cover"/>
+                                    ) : (
+                                        <img src={URL.createObjectURL(portfolio.logo)} alt="logo" className="h-full w-full rounded-full object-cover"/>
+                                    )
                                 ) : (
                                     portfolio.name.substring(0,2).toUpperCase()
                                 )}
@@ -733,7 +819,17 @@ const Portfolios: React.FC = () => {
                                 <div><label className="block text-xs font-bold text-gray-500 mb-1">Name *</label><input name="name" value={subFormData.name} onChange={handleSubInputChange} required className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" /></div>
                                 <div><label className="block text-xs font-bold text-gray-500 mb-1">Email *</label><input name="email" value={subFormData.email} onChange={handleSubInputChange} required className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" /></div>
                                 <div><label className="block text-xs font-bold text-gray-500 mb-1">Phone *</label><input name="phone" value={subFormData.phone} onChange={handleSubInputChange} required className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" /></div>
+                                <div><label className="block text-xs font-bold text-gray-500 mb-1">Commission Rate (%)</label><input name="commissionRate" type="number" step="0.01" value={subFormData.commissionRate} onChange={handleSubInputChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" /></div>
+                                <div><label className="block text-xs font-bold text-gray-500 mb-1">PAN</label><input name="pan" value={subFormData.pan} onChange={handleSubInputChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" /></div>
+                                <div><label className="block text-xs font-bold text-gray-500 mb-1">Aadhar</label><input name="aadhar" value={subFormData.aadhar} onChange={handleSubInputChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" /></div>
+                            </div>
+
+                            <h5 className="text-sm font-bold text-gray-700 uppercase mb-4 border-b pb-1">Address Details</h5>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div className="md:col-span-2"><label className="block text-xs font-bold text-gray-500 mb-1">Address</label><input name="address" value={subFormData.address} onChange={handleSubInputChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" /></div>
                                 <div><label className="block text-xs font-bold text-gray-500 mb-1">City</label><input name="city" value={subFormData.city} onChange={handleSubInputChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" /></div>
+                                <div><label className="block text-xs font-bold text-gray-500 mb-1">State</label><input name="state" value={subFormData.state} onChange={handleSubInputChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" /></div>
+                                <div><label className="block text-xs font-bold text-gray-500 mb-1">Pincode</label><input name="pincode" value={subFormData.pincode} onChange={handleSubInputChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" /></div>
                             </div>
                             
                             <h5 className="text-sm font-bold text-gray-700 uppercase mb-4 border-b pb-1 flex justify-between">
@@ -783,7 +879,7 @@ const Portfolios: React.FC = () => {
                 </div>
                 <div>
                     <p className="text-sm text-gray-600 font-medium">Sub-Marketers</p>
-                    <h4 className="text-2xl font-bold text-navy-700">{portfolios.reduce((acc, p) => acc + p.subMarketors.length, 0)}</h4>
+                    <h4 className="text-2xl font-bold text-navy-700">{portfolios.reduce((acc, p) => acc + (p.subMarketors?.length || 0), 0)}</h4>
                 </div>
             </Card>
             <Card className="flex items-center">
@@ -794,7 +890,7 @@ const Portfolios: React.FC = () => {
                     <p className="text-sm text-gray-600 font-medium">Total Raised</p>
                     <h4 className="text-2xl font-bold text-navy-700">
                         {(() => {
-                            const total = INITIAL_INVESTORS.reduce((acc, curr) => acc + curr.investments.reduce((sum, inv) => sum + (inv.portfolioId ? Number(inv.amount) : 0), 0), 0);
+                            const total = investors.reduce((acc, curr) => acc + curr.investments.reduce((sum, inv) => sum + (inv.portfolioId ? Number(inv.amount) : 0), 0), 0);
                             return total >= 10000000 ? `₹${(total/10000000).toFixed(2)} Cr` : `₹${(total/100000).toFixed(2)} L`;
                         })()}
                     </h4>
@@ -832,8 +928,22 @@ const Portfolios: React.FC = () => {
                         <div><label className="block text-sm font-medium text-gray-700 mb-2">Marketer Name *</label><input name="name" value={formData.name} onChange={handleInputChange} required className="w-full rounded-xl border border-gray-200 px-4 py-3" /></div>
                         <div><label className="block text-sm font-medium text-gray-700 mb-2">Email *</label><input name="email" value={formData.email} onChange={handleInputChange} required className="w-full rounded-xl border border-gray-200 px-4 py-3" /></div>
                         <div><label className="block text-sm font-medium text-gray-700 mb-2">Phone *</label><input name="phone" value={formData.phone} onChange={handleInputChange} required className="w-full rounded-xl border border-gray-200 px-4 py-3" /></div>
+                        <div><label className="block text-sm font-medium text-gray-700 mb-2">PAN</label><input name="pan" value={formData.pan} onChange={handleInputChange} className="w-full rounded-xl border border-gray-200 px-4 py-3" /></div>
+                        <div><label className="block text-sm font-medium text-gray-700 mb-2">Aadhar</label><input name="aadhar" value={formData.aadhar} onChange={handleInputChange} className="w-full rounded-xl border border-gray-200 px-4 py-3" /></div>
+                        <div><label className="block text-sm font-medium text-gray-700 mb-2">Default Commission Rate (%)</label><input name="defaultCommissionRate" type="number" step="0.01" value={formData.defaultCommissionRate} onChange={handleInputChange} className="w-full rounded-xl border border-gray-200 px-4 py-3" /></div>
+                        <div className="md:col-span-3"><label className="block text-sm font-medium text-gray-700 mb-2">Description</label><input name="description" value={formData.description} onChange={handleInputChange} className="w-full rounded-xl border border-gray-200 px-4 py-3" placeholder="Brief description about the marketer" /></div>
+                    </div>
+
+                    <h5 className="text-sm font-bold text-gray-700 uppercase mb-4 border-b pb-1">Address Details</h5>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                        <div className="md:col-span-3"><label className="block text-sm font-medium text-gray-700 mb-2">Address</label><input name="address" value={formData.address} onChange={handleInputChange} className="w-full rounded-xl border border-gray-200 px-4 py-3" /></div>
                         <div><label className="block text-sm font-medium text-gray-700 mb-2">City</label><input name="city" value={formData.city} onChange={handleInputChange} className="w-full rounded-xl border border-gray-200 px-4 py-3" /></div>
-                         <div><label className="block text-sm font-medium text-gray-700 mb-2">PAN</label><input name="pan" value={formData.pan} onChange={handleInputChange} className="w-full rounded-xl border border-gray-200 px-4 py-3" /></div>
+                        <div><label className="block text-sm font-medium text-gray-700 mb-2">State</label><input name="state" value={formData.state} onChange={handleInputChange} className="w-full rounded-xl border border-gray-200 px-4 py-3" /></div>
+                        <div><label className="block text-sm font-medium text-gray-700 mb-2">Pincode</label><input name="pincode" value={formData.pincode} onChange={handleInputChange} className="w-full rounded-xl border border-gray-200 px-4 py-3" /></div>
+                    </div>
+
+                    <h5 className="text-sm font-bold text-gray-700 uppercase mb-4 border-b pb-1">Documents</h5>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                         <div>
                              <label className="block text-sm font-medium text-gray-700 mb-2">Logo/Photo</label>
                              <input type="file" onChange={handleFileChange} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" />

@@ -1,12 +1,28 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Card from '../components/Card';
 import Table, { Column } from '../components/Table';
-import { INITIAL_INVESTORS, INITIAL_PORTFOLIOS } from '../constants';
+import { Investor, Portfolio } from '../types';
+import { investorsAPI, portfoliosAPI } from '../src/services/api';
 
 type ReportTab = 'OVERALL' | 'INVESTMENT_PAYOUT' | 'MARKETER';
 
 const Reports: React.FC = () => {
     const [activeTab, setActiveTab] = useState<ReportTab>('OVERALL');
+    const [investors, setInvestors] = useState<Investor[]>([]);
+    const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const [i, p] = await Promise.all([investorsAPI.getAll(), portfoliosAPI.getAll()]);
+                setInvestors(i || []);
+                setPortfolios(p || []);
+            } catch (err) {
+                console.error('Failed to fetch reports data', err);
+            }
+        };
+        fetchData();
+    }, []);
 
     const formatCurrency = (val: number) => {
         return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
@@ -16,13 +32,13 @@ const Reports: React.FC = () => {
 
     const investmentReportData = useMemo(() => {
         const rows: any[] = [];
-        INITIAL_INVESTORS.forEach(inv => {
+        investors.forEach(inv => {
             inv.investments.forEach(deal => {
                 const amount = Number(deal.amount || 0);
                 const rate = Number(deal.interestRate || 0);
                 
                 // Find Marketer Names
-                const portfolio = INITIAL_PORTFOLIOS.find(p => p.id === deal.portfolioId);
+                const portfolio = portfolios.find(p => p.id === deal.portfolioId);
                 const marketerName = portfolio?.name || 'Direct';
                 const subMarketer = portfolio?.subMarketors.find(s => s.id === deal.subMarketorId);
                 const combinedMarketer = subMarketer ? `${marketerName} / ${subMarketer.name}` : marketerName;
@@ -40,14 +56,14 @@ const Reports: React.FC = () => {
             });
         });
         return rows;
-    }, []);
+    }, [investors, portfolios]);
 
     const marketerReportData = useMemo(() => {
-        return INITIAL_PORTFOLIOS.map(p => {
+        return portfolios.map(p => {
             let totalRaised = 0;
             let totalCommissionMonthly = 0;
             
-            INITIAL_INVESTORS.forEach(inv => {
+            investors.forEach(inv => {
                 inv.investments.forEach(deal => {
                     if (deal.portfolioId === p.id) {
                          const amount = Number(deal.amount || 0);
@@ -66,7 +82,7 @@ const Reports: React.FC = () => {
                 avgCommPercent: totalRaised > 0 ? ((totalCommissionMonthly * 12) / totalRaised) * 100 : 0
             };
         });
-    }, []);
+    }, [investors, portfolios]);
 
     const summaryStats = useMemo(() => {
         const totalCapital = investmentReportData.reduce((s, r) => s + r.amount, 0);
