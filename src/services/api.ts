@@ -44,12 +44,24 @@ export const investorsAPI = {
       headers: {
         ...(token && { 'Authorization': `Bearer ${token}` }),
       },
-      body: formData, // Don't set Content-Type for FormData
+      body: formData,
     });
     return handleResponse(response);
   },
 
   update: async (id: string, data: any) => {
+    const token = localStorage.getItem('auth_token');
+    if (data instanceof FormData) {
+      const response = await fetch(`${API_BASE_URL}/investors/${id}`, {
+        method: 'PUT',
+        headers: {
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
+        body: data
+      });
+      return handleResponse(response);
+    }
+
     const response = await fetch(`${API_BASE_URL}/investors/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
@@ -76,20 +88,108 @@ export const portfoliosAPI = {
     return handleResponse(response);
   },
 
-  create: async (data: { name: string; description?: string; defaultCommissionRate?: number }) => {
-    const response = await fetch(`${API_BASE_URL}/portfolios`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data),
-    });
+  create: async (data: any) => {
+    const token = localStorage.getItem('auth_token');
+
+    // Check if we have file uploads (logo)
+    const hasLogoFile = data.logoFile instanceof File;
+
+    let response: Response;
+
+    if (hasLogoFile) {
+      const fd = new FormData();
+      const payload: any = { ...data };
+      delete payload.logoFile;
+
+      fd.append('data', JSON.stringify(payload));
+      fd.append('logo', data.logoFile);
+
+      response = await fetch(`${API_BASE_URL}/portfolios`, {
+        method: 'POST',
+        headers: {
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
+        body: fd,
+      });
+    } else {
+      response = await fetch(`${API_BASE_URL}/portfolios`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      });
+    }
+
     return handleResponse(response);
   },
 
-  addSubMarketor: async (portfolioId: string, data: { name: string; email?: string; mobile?: string; commissionRate?: number }) => {
-    const response = await fetch(`${API_BASE_URL}/portfolios/${portfolioId}/sub-marketors`, {
-      method: 'POST',
+  addSubMarketor: async (portfolioId: string, data: any) => {
+    const token = localStorage.getItem('auth_token');
+    const hasPhotoFile = data.photoFile instanceof File;
+
+    let response: Response;
+
+    if (hasPhotoFile) {
+      const fd = new FormData();
+      const payload: any = { ...data };
+      delete payload.photoFile;
+
+      fd.append('data', JSON.stringify(payload));
+      fd.append('photo', data.photoFile);
+
+      response = await fetch(`${API_BASE_URL}/portfolios/${portfolioId}/sub-marketors`, {
+        method: 'POST',
+        headers: {
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
+        body: fd,
+      });
+    } else {
+      response = await fetch(`${API_BASE_URL}/portfolios/${portfolioId}/sub-marketors`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      });
+    }
+
+    return handleResponse(response);
+  },
+
+  updateSubMarketor: async (portfolioId: string, subMarketorId: string, data: any) => {
+    const token = localStorage.getItem('auth_token');
+    const hasPhotoFile = data.photoFile instanceof File;
+
+    let response: Response;
+
+    if (hasPhotoFile) {
+      const fd = new FormData();
+      const payload: any = { ...data };
+      delete payload.photoFile;
+
+      fd.append('data', JSON.stringify(payload));
+      fd.append('photo', data.photoFile);
+
+      response = await fetch(`${API_BASE_URL}/portfolios/${portfolioId}/sub-marketors/${subMarketorId}`, {
+        method: 'PUT',
+        headers: {
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
+        body: fd,
+      });
+    } else {
+      response = await fetch(`${API_BASE_URL}/portfolios/${portfolioId}/sub-marketors/${subMarketorId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      });
+    }
+
+    return handleResponse(response);
+  },
+
+  deleteSubMarketor: async (portfolioId: string, subMarketorId: string) => {
+    const response = await fetch(`${API_BASE_URL}/portfolios/${portfolioId}/sub-marketors/${subMarketorId}`, {
+      method: 'DELETE',
       headers: getAuthHeaders(),
-      body: JSON.stringify(data),
     });
     return handleResponse(response);
   },
@@ -112,6 +212,71 @@ export const adminBanksAPI = {
     });
     return handleResponse(response);
   },
+
+  getProfile: async () => {
+    const response = await fetch(`${API_BASE_URL}/admin-banks/profile`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  updateProfile: async (data: { name: string; email: string; phone: string; photoFile?: string | File | null; bankAccounts: any[] }) => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('No auth token found. Please login before saving the admin profile.');
+    }
+
+    // If there are files (photoFile or passbook files), use FormData
+    const hasPhotoFile = data.photoFile instanceof File;
+    const hasPassbookFiles = (data.bankAccounts || []).some((b: any) => b.passbookFile instanceof File);
+
+    let response: Response;
+
+    if (hasPhotoFile || hasPassbookFiles) {
+      const fd = new FormData();
+      // Clone payload without file objects
+      const payload: any = { ...data };
+      if (payload.photoFile) delete payload.photoFile;
+      if (payload.bankAccounts) payload.bankAccounts = payload.bankAccounts.map((b: any) => ({ ...b, passbookFile: undefined }));
+
+      fd.append('data', JSON.stringify(payload));
+
+      if (hasPhotoFile && data.photoFile instanceof File) {
+        fd.append('photo', data.photoFile);
+      }
+
+      if (hasPassbookFiles) {
+        for (const bank of data.bankAccounts) {
+          if (bank.passbookFile instanceof File) {
+            fd.append(`passbook_${bank.id}`, bank.passbookFile);
+          }
+        }
+      }
+
+      response = await fetch(`${API_BASE_URL}/admin-banks/profile`, {
+        method: 'PUT',
+        headers: {
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
+        body: fd,
+      });
+
+    } else {
+      response = await fetch(`${API_BASE_URL}/admin-banks/profile`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      });
+    }
+
+    try {
+      return await handleResponse(response);
+    } catch (err: any) {
+      // Add context for easier debugging on the client
+      throw new Error(`${err.message} (PUT /admin-banks/profile returned ${response.status})`);
+    }
+  },
+
 };
 
 // Dashboard API

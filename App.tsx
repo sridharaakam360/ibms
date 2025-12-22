@@ -4,6 +4,7 @@ import Navbar from './components/Navbar';
 import Investors from './pages/Investors';
 import Dashboard from './pages/Dashboard';
 import Portfolios from './pages/Portfolios';
+import SubMarketors from './pages/SubMarketors';
 import Reports from './pages/Reports';
 import Login from './pages/Login';
 import { ViewState, AdminProfile, BankAccount } from './types';
@@ -81,6 +82,8 @@ const AppContent: React.FC = () => {
         return isSuperAdmin ? <Dashboard /> : <Investors adminBanks={adminProfile.bankAccounts} />;
       case ViewState.PORTFOLIOS:
         return isSuperAdmin ? <Portfolios /> : <Investors adminBanks={adminProfile.bankAccounts} />;
+      case ViewState.SUB_MARKETORS:
+        return isSuperAdmin ? <SubMarketors /> : <Investors adminBanks={adminProfile.bankAccounts} />;
       case ViewState.REPORTS:
         return isSuperAdmin ? <Reports /> : <Investors adminBanks={adminProfile.bankAccounts} />;
       default:

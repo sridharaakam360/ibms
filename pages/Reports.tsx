@@ -30,8 +30,19 @@ const Reports: React.FC = () => {
 
     // --- Data Aggregation for Reports ---
 
-    const investmentReportData = useMemo(() => {
-        const rows: any[] = [];
+    type InvestmentRow = {
+        id: string;
+        investorName: string;
+        combinedMarketer: string;
+        amount: number;
+        interestRate: number;
+        monthlyPayout: number;
+        startDate?: string;
+        endDate?: string;
+    };
+
+    const investmentReportData = useMemo<InvestmentRow[]>(() => {
+        const rows: InvestmentRow[] = [];
         investors.forEach(inv => {
             inv.investments.forEach(deal => {
                 const amount = Number(deal.amount || 0);
@@ -58,7 +69,15 @@ const Reports: React.FC = () => {
         return rows;
     }, [investors, portfolios]);
 
-    const marketerReportData = useMemo(() => {
+    type MarketerRow = {
+        id: string;
+        name: string;
+        totalRaised: number;
+        totalCommissionMonthly: number;
+        avgCommPercent: number;
+    };
+
+    const marketerReportData = useMemo<MarketerRow[]>(() => {
         return portfolios.map(p => {
             let totalRaised = 0;
             let totalCommissionMonthly = 0;
@@ -151,7 +170,7 @@ const Reports: React.FC = () => {
 
             {activeTab === 'INVESTMENT_PAYOUT' && (
                 <Card title="Investment & Payout Schedule" className="animate-fade-in-up">
-                    <Table 
+                    <Table<InvestmentRow> 
                         columns={[
                             { header: 'Investor', accessorKey: 'investorName', sortable: true, className: 'text-xs font-bold text-navy-700' },
                             { header: 'Marketer / Sub', accessorKey: 'combinedMarketer', sortable: true, className: 'text-[10px] text-gray-500 font-bold uppercase' },
@@ -169,7 +188,7 @@ const Reports: React.FC = () => {
 
             {activeTab === 'MARKETER' && (
                 <Card title="Marketer Performance Report" className="animate-fade-in-up">
-                    <Table 
+                    <Table<MarketerRow> 
                         columns={[
                             { header: 'Marketer Name', accessorKey: 'name', sortable: true, className: 'text-xs font-bold text-navy-700' },
                             { header: 'Total Capital Raised', accessorKey: 'totalRaised', render: (r) => <span className="text-xs font-bold text-navy-700">{formatCurrency(r.totalRaised)}</span>, sortable: true },

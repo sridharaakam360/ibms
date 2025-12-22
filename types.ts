@@ -7,7 +7,7 @@ export interface BankAccount {
   branch: string;
   accountHolderName: string;
   accountNumber: string;
-  passbookFile?: File | null;
+  passbookFile?: File | string | null;
   isActive?: boolean;
   subMarketorId?: string;
   portfolioId?: string;
@@ -17,13 +17,13 @@ export interface BankAccount {
 export interface OtherDocument {
   id: string;
   docName: string;
-  file: File | null;
+  file: File | string | null;
 }
 
 export interface KYCDocuments {
-  photo?: File | null;
-  aadharCard?: File | null;
-  panCard?: File | null;
+  photo?: File | string | null;
+  aadharCard?: File | string | null;
+  panCard?: File | string | null;
   others: OtherDocument[];
 }
 
@@ -78,6 +78,7 @@ export interface SubMarketor {
   city?: string;
   state?: string;
   pincode?: string;
+  photoFile?: string | null;
   commissionRate?: number;
   isActive?: boolean;
   bankAccounts: BankAccount[];
@@ -110,6 +111,8 @@ export interface AdminProfile {
   name: string;
   email: string;
   phone: string;
+  photo_file?: string | null; // server-side path
+  photoFile?: File | null; // client-side uploaded file
   bankAccounts: BankAccount[];
 }
 
@@ -123,5 +126,6 @@ export enum ViewState {
   DASHBOARD = 'DASHBOARD',
   INVESTORS = 'INVESTORS',
   PORTFOLIOS = 'PORTFOLIOS',
+  SUB_MARKETORS = 'SUB_MARKETORS',
   REPORTS = 'REPORTS'
 }

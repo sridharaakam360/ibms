@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { AdminProfile, BankAccount } from '../types';
+import Avatar from './Avatar';
 import { useAuth } from '../src/contexts/AuthContext';
+import { adminBanksAPI } from '../src/services/api';
+
 
 interface NavbarProps {
   title: string;
@@ -68,13 +71,21 @@ const Navbar: React.FC<NavbarProps> = ({ title, onMenuClick, adminProfile, setAd
       setFormData(prev => ({ ...prev, bankAccounts: updated }));
   };
 
-  const handleSave = (e: React.FormEvent) => {
-      e.preventDefault();
-      if (setAdminProfile) {
-          setAdminProfile(formData);
-          setIsProfileOpen(false);
-      }
-  };
+const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+        await adminBanksAPI.updateProfile(formData);
+        if (setAdminProfile) {
+            setAdminProfile(formData);
+        }
+        alert('Admin profile saved successfully!');
+        setIsProfileOpen(false);
+    } catch (error: any) {
+        console.error('Failed to save admin profile:', error);
+        alert(error.message || 'Failed to save admin profile');
+    }
+};
+
 
   return (
     <>
@@ -114,14 +125,14 @@ const Navbar: React.FC<NavbarProps> = ({ title, onMenuClick, adminProfile, setAd
         
         {/* Profile Dropdown */}
         <div className="relative">
-            <div
-                className="h-10 w-10 overflow-hidden rounded-full border border-gray-200 cursor-pointer hover:ring-2 hover:ring-indigo-500 transition-all"
-                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            >
-                <div className="h-full w-full bg-indigo-600 flex items-center justify-center text-white font-bold">
-                    {user?.username ? user.username.charAt(0).toUpperCase() : 'A'}
-                </div>
-            </div>
+<Avatar 
+                    firstName={adminProfile?.name || user?.username || 'Admin'}
+                    lastName=""
+                    photoUrl={(adminProfile as any)?.photo_file}
+                    size="sm"
+                    className="cursor-pointer hover:ring-2 hover:ring-indigo-500 transition-all"
+                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                />
 
             {/* Dropdown Menu */}
             {isDropdownOpen && (
@@ -195,6 +206,27 @@ const Navbar: React.FC<NavbarProps> = ({ title, onMenuClick, adminProfile, setAd
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                             <input name="phone" value={formData.phone} onChange={handleInputChange} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+                        </div>
+                        <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Profile Photo</label>
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                    if (e.target.files && e.target.files[0]) {
+                                        const file = e.target.files[0];
+                                        setFormData(prev => ({ ...prev, photoFile: file, photo_file: URL.createObjectURL(file) }));
+                                    }
+                                }}
+                                className="w-full text-sm"
+                            />
+                            {(formData.photo_file || formData.photoFile) && (
+                                <img
+                                    src={formData.photoFile ? URL.createObjectURL(formData.photoFile as File) : (typeof formData.photo_file === 'string' && formData.photo_file.startsWith('/uploads') ? `http://localhost:5000${formData.photo_file}` : formData.photo_file)}
+                                    alt="Profile preview"
+                                    className="mt-2 h-20 w-20 rounded-full object-cover"
+                                />
+                            )}
                         </div>
                     </div>
 

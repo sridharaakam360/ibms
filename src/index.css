@@ -2,6 +2,52 @@
 
 @theme {
   --font-family-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+
+  /* Gray color palette */
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+
+  /* Navy colors (custom) */
+  --color-navy-700: #1e293b;
+  --color-navy-800: #0f172a;
+
+  /* Additional colors for the app */
+  --color-white: #ffffff;
+  --color-black: #000000;
+
+  /* Blue colors */
+  --color-blue-50: #eff6ff;
+  --color-blue-100: #dbeafe;
+  --color-blue-500: #3b82f6;
+  --color-blue-600: #2563eb;
+  --color-blue-700: #1d4ed8;
+
+  /* Green colors */
+  --color-green-50: #f0fdf4;
+  --color-green-500: #22c55e;
+  --color-green-600: #16a34a;
+
+  /* Red colors */
+  --color-red-50: #fef2f2;
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+
+  /* Yellow colors */
+  --color-yellow-50: #fefce8;
+  --color-yellow-500: #eab308;
+
+  /* Indigo colors */
+  --color-indigo-50: #eef2ff;
+  --color-indigo-500: #6366f1;
+  --color-indigo-600: #4f46e5;
 }
 
 /* Custom Scrollbar */
